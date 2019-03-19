@@ -224,7 +224,6 @@ class Net(nn.Module):
     def __init__(self, emb_matrix, hidden_size):
         super(Net, self).__init__()
 
-        # GloVe emb matrix
         num_words, emb_size = emb_matrix.shape
 
         self.hidden_size = hidden_size

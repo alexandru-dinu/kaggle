@@ -1,3 +1,30 @@
+quora-1:
+    naive bayes - own + sklearn
+
+quora-2:
+    (glove) -> (gru) -> (dense)
+    adam fixed lr: 1e-4
+    slen/bsize/epochs: 60/512/5
+
+quora-3:
+    (glove+paragram) -> (gru) -> (dense)
+    adam fixed lr: 1e-4
+    slen/bsize/epochs: 60/512/8
+
+quora-4:
+    (glove+paragram) -> (bidir gru, h_size=slen) -> (dense)
+    adam stepLR: 1e-3, gamma=0.5, step=2
+    slen/bsize/epochs: 70/256/8
+
+quora-5:
+    (glove+paragram) -> (bidir lstm, h_size=slen) -> (dropout) -> (bidir gru) -> (dense)
+    adam stepLR: 1e-3, gamma=0.5, step=2
+    slen/bsize/epochs: 70/256/8
+
+
+###
+
+
 WORD2VEC_SYN_DICT = {
     'any1'        : 'anyone',
     'b4'          : 'before',
