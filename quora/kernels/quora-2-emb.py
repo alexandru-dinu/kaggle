@@ -1,6 +1,7 @@
 # coding: utf-8
 
 
+import os
 import re
 import time
 from collections import Counter
@@ -28,16 +29,16 @@ DATA_DIR = "../input"
 TRAIN_CSV = f"{DATA_DIR}/train.csv"
 TEST_CSV = f"{DATA_DIR}/test.csv"
 
-EMB_GLOVE = f"{DATA_DIR}/embeddings/glove.840B.300d/glove.840B.300d.txt"
-EMB_WORD2VEC = f"{DATA_DIR}/embeddings/GoogleNews-vectors-negative300/GoogleNews-vectors-negative300.bin"
-EMB_PARAGRAM = f"{DATA_DIR}/embeddings/paragram_300_sl999/paragram_300_sl999.txt"
-EMB_WIKI = f"{DATA_DIR}/embeddings/wiki-news-300d-1M/wiki-news-300d-1M.vec"
+EMB_GLOVE_FILE = f"{DATA_DIR}/embeddings/glove.840B.300d/glove.840B.300d.txt"
 
 # CLEANING #############################################################################################################
 
-SEP_PUNCTS = u'\u200b' + "/-'´‘…—−–"
-SHOULD_KEEP_PUNCTS = "&"
-TO_REMOVE_PUNCTS = '?!.,，"#$%\'()*+-/:;<=>@[\\]^_`{|}~“”’™•°'
+PUNCTUATION = {
+    'sep'   : u'\u200b' + "/-'´‘…—−–",
+    'keep'  : "&",
+    'remove': '?!.,，"#$%\'()*+-/:;<=>@[\\]^_`{|}~“”’™•°'
+}
+
 GLOVE_SYN_DICT = {
     'cryptocurrencies': 'crypto currencies',
     'ethereum'        : 'crypto currency',
@@ -78,11 +79,11 @@ def tokenize(s: str):
 def clean_text(x):
     x = x.lower()
 
-    for p in SEP_PUNCTS:
+    for p in PUNCTUATION['sep']:
         x = x.replace(p, " ")
-    for p in SHOULD_KEEP_PUNCTS:
+    for p in PUNCTUATION['keep']:
         x = x.replace(p, f" {p} ")
-    for p in TO_REMOVE_PUNCTS:
+    for p in PUNCTUATION['remove']:
         x = x.replace(p, "")
 
     return x
@@ -108,6 +109,36 @@ def clean_all(x):
     return x
 
 
+# LOAD DATA ############################################################################################################
+
+
+def build_glove_embedding_matrix(w_idx, len_voc):
+    """
+    Random values of oov words
+    """
+
+    def get_coefs(w, *arr):
+        return w, np.asarray(arr, dtype='float32')
+
+    emb_dict = dict(get_coefs(*o.split(" ")) for o in open(EMB_GLOVE_FILE, encoding='latin'))
+
+    all_embs = np.stack(list(emb_dict.values()))
+    emb_mean, emb_std = all_embs.mean(), all_embs.std()
+    embed_size = all_embs.shape[1]
+
+    n_words = min(len_voc, len(w_idx))
+    emb_matrix = np.random.normal(emb_mean, emb_std, (n_words, embed_size))
+
+    for word, wi in tqdm(w_idx.items()):
+        if wi >= len_voc: continue
+
+        emb_vector = emb_dict.get(word, None)
+        if emb_vector is not None:
+            emb_matrix[wi] = emb_vector
+
+    return emb_matrix
+
+
 def build_vocabulary(df: pd.DataFrame) -> Counter:
     sentences = df.progress_apply(tokenize).values
     vocab = Counter()
@@ -115,49 +146,49 @@ def build_vocabulary(df: pd.DataFrame) -> Counter:
     for sentence in tqdm(sentences):
         for word in sentence:
             vocab[word] += 1
+
     return vocab
 
 
-# LOAD DATA ############################################################################################################
+def load_data(sentence_maxlen, shuffle_train=False):
+    print("Read csv")
+    train_df = pd.read_csv(TRAIN_CSV)
+    test_df = pd.read_csv(TEST_CSV)
 
-def make_data(df, len_voc, sentence_maxlen, is_test=False):
-    t = Tokenizer(num_words=len_voc, filters='')
-    t.fit_on_texts(df['clean_question_text'])
+    print("Clean DataFrames")
+    train_df["question_text"] = train_df["question_text"].progress_apply(clean_all)
+    test_df["question_text"] = test_df["question_text"].progress_apply(clean_all)
 
-    X = pad_sequences(sequences=t.texts_to_sequences(df['clean_question_text']), maxlen=sentence_maxlen)
+    train_vocab = build_vocabulary(train_df["question_text"])
+    num_words = len(train_vocab)
 
-    if not is_test:
-        Y = df['target'].values
-        return X, Y, t.word_index
+    X_train = train_df["question_text"].fillna("_##_").values
+    X_test = test_df["question_text"].fillna("_##_").values
+
+    print("Tokenize")
+    tok = Tokenizer(num_words=num_words)
+    tok.fit_on_texts(list(X_train))
+
+    print("Pad")
+    X_train = pad_sequences(tok.texts_to_sequences(X_train), maxlen=sentence_maxlen)
+    X_test = pad_sequences(tok.texts_to_sequences(X_test), maxlen=sentence_maxlen)
+    Y_train = train_df['target'].values
+
+    word_index = tok.word_index
+
+    if shuffle_train:
+        idx = np.random.permutation(len(X_train))
+        X_train = X_train[idx]
+        Y_train = Y_train[idx]
+
+    print("Embedding matrix")
+    if LOCAL and os.path.isfile("glove_embedding_matrix.npy"):
+        emb_matrix = np.load("glove_embedding_matrix.npy")
     else:
-        return X
+        emb_matrix = build_glove_embedding_matrix(w_idx=word_index, len_voc=len(train_vocab))
+        if LOCAL: np.save(file="glove_embedding_matrix.npy", arr=emb_matrix)
 
-
-def load_glove():
-    def get_coefs(word, *arr):
-        return word, np.asarray(arr, dtype='float32')
-
-    return dict(get_coefs(*o.split(" ")) for o in open(EMB_GLOVE, encoding='latin'))
-
-
-def make_embedding_matrix(embeddings_dict, w_idx, len_voc):
-    """
-    Random values of oov words
-    """
-    all_embs = np.stack(list(embeddings_dict.values()))
-    emb_mean, emb_std = all_embs.mean(), all_embs.std()
-    embed_size = all_embs.shape[1]
-
-    _embedding_matrix = np.random.normal(emb_mean, emb_std, (len_voc, embed_size))
-
-    for word, wi in tqdm(w_idx.items()):
-        if wi >= len_voc:
-            continue
-        embedding_vector = embeddings_dict.get(word, None)
-        if embedding_vector is not None:
-            _embedding_matrix[wi] = embedding_vector
-
-    return _embedding_matrix
+    return X_train, Y_train, X_test, train_vocab, emb_matrix, word_index
 
 
 # MODEL ################################################################################################################
@@ -210,34 +241,19 @@ def sigmoid(x):
 
 # MAIN #################################################################################################################
 
-# HP
-SENTENCE_MAXLEN = 35
-BATCH_SIZE = 256
-NUM_EPOCHS = 5
-LOCAL = True
-# --
 
-print("Loading csvs")
-TRAIN_DF = pd.read_csv(TRAIN_CSV)
-TEST_DF = pd.read_csv(TEST_CSV)
+LOCAL = False  # whether it's running locally or on kaggle
 
-print("Building cleaned vocabs")
-TRAIN_DF["clean_question_text"] = TRAIN_DF["question_text"].progress_apply(clean_all)
-TEST_DF["clean_question_text"] = TEST_DF["question_text"].progress_apply(clean_all)
+HP = {
+    "sentence_maxlen": 60,
+    "batch_size"     : 512,
+    "num_epochs"     : 5,
+}
 
-TRAIN_VOCAB = build_vocabulary(TRAIN_DF["clean_question_text"])
-TEST_VOCAB = build_vocabulary(TEST_DF["clean_question_text"])
-
-print("Make train/test data")
-# X = train_size x sentence_maxlen
-X_TRAIN, Y_TRAIN, WORD_INDEX = make_data(TRAIN_DF, len_voc=len(TRAIN_VOCAB), sentence_maxlen=SENTENCE_MAXLEN)
-X_TEST = make_data(TEST_DF, len_voc=len(TEST_VOCAB), sentence_maxlen=SENTENCE_MAXLEN, is_test=True)
-
-print("Load emb matrix")
-if LOCAL:
-    EMBEDDING_MATRIX = np.load("glove_embedding_matrix.npy")
-else:
-    EMBEDDING_MATRIX = make_embedding_matrix(embeddings_dict=load_glove(), w_idx=WORD_INDEX, len_voc=len(TRAIN_VOCAB))
+# LOAD DATA
+X_TRAIN, Y_TRAIN, X_TEST, TRAIN_VOCAB, EMBEDDING_MATRIX, WORD_INDEX = load_data(
+    sentence_maxlen=HP['sentence_maxlen'], shuffle_train=True
+)
 
 print("\nStarting train loop\n")
 
@@ -249,7 +265,7 @@ test_preds = np.zeros((len(X_TEST)))
 
 test_dataloader = torch.utils.data.DataLoader(
     dataset=torch.utils.data.TensorDataset(torch.tensor(X_TEST, dtype=torch.long).cuda()),
-    batch_size=BATCH_SIZE, shuffle=False
+    batch_size=HP['batch_size'], shuffle=False
 )
 
 for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
@@ -260,20 +276,22 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     y_val_fold = torch.tensor(Y_TRAIN[val_idx, np.newaxis], dtype=torch.float32).cuda()
 
     # TODO: change sen maxlen maybe?
-    model = Net(emb_matrix=EMBEDDING_MATRIX, sen_maxlen=SENTENCE_MAXLEN, num_layers=1)
+    model = Net(emb_matrix=EMBEDDING_MATRIX, sen_maxlen=HP['sentence_maxlen'], num_layers=1)
     model.cuda()
 
     loss_fn = torch.nn.BCEWithLogitsLoss(reduction="sum")
     # loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
 
     # TODO: schedule?
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.0001)
 
     train_dataloader = torch.utils.data.DataLoader(
-        dataset=torch.utils.data.TensorDataset(x_train_fold, y_train_fold), batch_size=BATCH_SIZE, shuffle=True
+        dataset=torch.utils.data.TensorDataset(x_train_fold, y_train_fold), batch_size=HP['batch_size'],
+        shuffle=True
     )
     val_dataloader = torch.utils.data.DataLoader(
-        dataset=torch.utils.data.TensorDataset(x_val_fold, y_val_fold), batch_size=BATCH_SIZE, shuffle=False
+        dataset=torch.utils.data.TensorDataset(x_val_fold, y_val_fold), batch_size=HP['batch_size'],
+        shuffle=False
     )
 
     test_preds_fold = np.zeros(len(X_TEST))
@@ -283,14 +301,14 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     print(f"Fold {fold_idx}; num_batches = {num_batches}")
 
     # for current fold, train NUM_EPOCHS
-    for epoch_idx in range(1, NUM_EPOCHS + 1):
+    for epoch_idx in range(1, HP['num_epochs'] + 1):
         start_time = time.time()
 
         model.train()
         avg_loss = 0.0
         my_loss = 0.0
 
-        print(f"Epoch {epoch_idx}/{NUM_EPOCHS}")
+        print(f"Epoch {epoch_idx}/{HP['num_epochs']}")
         for batch_idx, (x_batch, y_batch) in tqdm(enumerate(train_dataloader, start=1), total=len(train_dataloader)):
             y_pred = model(x_batch).squeeze(0)
 
@@ -303,40 +321,38 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
             avg_loss += loss.item() / len(train_dataloader)
             my_loss += loss.item()
 
-            if batch_idx % 512 == 0:
-                print("loss:", my_loss / 512.0)
-                my_loss = 0.0
+            if batch_idx % 512 == 0: print("loss:", my_loss / 512.0); my_loss = 0.0
         # -- end batch
 
         print("Cross-validation")
         model.eval()
         avg_val_loss = 0.0
+
         for i, (x_batch, y_batch) in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
             y_pred = model(x_batch).detach().squeeze(0)
             avg_val_loss += loss_fn(y_pred, y_batch).item() / len(val_dataloader)
-            val_preds_fold[i * BATCH_SIZE:(i + 1) * BATCH_SIZE] = sigmoid(y_pred.cpu().numpy())[:, 0]
+            val_preds_fold[i * HP['batch_size']:(i + 1) * HP['batch_size']] = sigmoid(y_pred.cpu().numpy())[:, 0]
         # --
 
         print('\n\nsummary: Fold {}/{} \t Epoch {}/{} \t loss={:.4f} \t val_loss={:.4f} \t time={:.2f}s\n'.format(
-            fold_idx, len(train_splits), epoch_idx, NUM_EPOCHS, avg_loss, avg_val_loss, time.time() - start_time)
-        )
+            fold_idx, len(train_splits), epoch_idx, HP['num_epochs'], avg_loss, avg_val_loss, time.time() - start_time
+        ))
 
         if LOCAL:
-            _w_name = f"./checkpoints/slen35_model_f{fold_idx}_e{epoch_idx}.pth"
+            _w_name = f"./checkpoints/bugfix_model_f{fold_idx}_e{epoch_idx}.pth"
             torch.save(model.state_dict(), _w_name)
             print(f"Saved weights to [{_w_name}]\n")
     # -- end epoch
 
-    # for current fold
+    # for current fold, predict on test data
     print(f"Fold {fold_idx} done; test on test data")
     for i, (x_batch,) in tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
         y_pred = model(x_batch).detach().squeeze(0)
-        test_preds_fold[i * BATCH_SIZE:(i + 1) * BATCH_SIZE] = sigmoid(y_pred.cpu().numpy())[:, 0]
+        test_preds_fold[i * HP['batch_size']:(i + 1) * HP['batch_size']] = sigmoid(y_pred.cpu().numpy())[:, 0]
+    # --
 
-    # fill predictions for training data from current validation set
-    train_preds[val_idx] = val_preds_fold
-    # average predictions for each split
-    test_preds += test_preds_fold / len(train_splits)
+    train_preds[val_idx] = val_preds_fold  # fill predictions for training data from current validation set
+    test_preds += test_preds_fold / len(train_splits)  # average test predictions for each fold
 
 
 # SUBMIT ###############################################################################################################
@@ -344,7 +360,7 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
 def threshold_search(y_true, y_predicted):
     best_threshold, best_score = 0, 0
 
-    for thr in tqdm(np.linspace(-1.5, 1.5, 75)):
+    for thr in tqdm(np.linspace(-1.5, 1.5, 100)):
         score = f1_score(y_true=y_true, y_pred=(y_predicted > thr).astype(int))
         if score > best_score:
             best_threshold = thr
@@ -356,6 +372,6 @@ def threshold_search(y_true, y_predicted):
 search_result = threshold_search(Y_TRAIN, train_preds)
 print(search_result)
 
-submission = pd.DataFrame.from_dict({'qid': TEST_DF['qid']})
-submission['prediction'] = (test_preds > search_result['threshold']).astype(int)
+submission = pd.read_csv('../input/sample_submission.csv')
+submission.prediction = (test_preds > search_result['threshold']).astype(int)
 submission.to_csv("submission.csv", index=False)
