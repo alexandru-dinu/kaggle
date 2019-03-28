@@ -242,6 +242,9 @@ class Net(nn.Module):
 
         self.fc = nn.Linear(2 * self.hidden_size, 1)
 
+        self.dropout = nn.Dropout(0.1)
+        self.relu = nn.ReLU()
+
     def forward(self, x):
         # x: B x sen_maxlen
 

@@ -197,7 +197,6 @@ class Net(nn.Module):
     def __init__(self, emb_matrix, sen_maxlen, num_layers=1):
         super(Net, self).__init__()
 
-        # GloVe emb matrix
         num_words, emb_size = emb_matrix.shape
 
         self.hidden_size = emb_size
@@ -215,6 +214,9 @@ class Net(nn.Module):
         )
 
         self.fc = nn.Linear(self.hidden_size, 1)
+
+        self.dropout = nn.Dropout(0.1)
+        self.relu = nn.ReLU()
 
     def forward(self, x):
         # x: B x sen_maxlen

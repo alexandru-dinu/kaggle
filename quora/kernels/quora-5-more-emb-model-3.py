@@ -4,6 +4,7 @@
 import os
 import re
 import time
+import datetime
 from collections import Counter
 
 import numpy as np
@@ -32,6 +33,13 @@ TEST_CSV = f"{DATA_DIR}/test.csv"
 
 EMB_GLOVE_FILE = f"{DATA_DIR}/embeddings/glove.840B.300d/glove.840B.300d.txt"
 EMB_PARAGRAM_FILE = f"{DATA_DIR}/embeddings/paragram_300_sl999/paragram_300_sl999.txt"
+
+LOG_NAME = "./output.log"
+LOG_FP = open(LOG_NAME, "wt")
+def LOG(*s):
+    _s = str(datetime.datetime.now()).split('.')[0]  + str(s) + "\n"
+    print(_s)
+    LOG_FP.write(_s)
 
 # CLEANING #############################################################################################################
 
@@ -178,11 +186,11 @@ def build_vocabulary(df: pd.DataFrame) -> Counter:
 
 
 def load_data(sentence_maxlen, shuffle_train=False):
-    print("Read csv")
+    LOG("Read csvs...")
     train_df = pd.read_csv(TRAIN_CSV)
     test_df = pd.read_csv(TEST_CSV)
 
-    print("Clean DataFrames")
+    LOG("Clean DataFrames...")
     train_df["question_text"] = train_df["question_text"].progress_apply(clean_all)
     test_df["question_text"] = test_df["question_text"].progress_apply(clean_all)
 
@@ -192,11 +200,11 @@ def load_data(sentence_maxlen, shuffle_train=False):
     X_train = train_df["question_text"].fillna("_##_").values
     X_test = test_df["question_text"].fillna("_##_").values
 
-    print("Tokenize")
+    LOG("Tokenize...")
     tok = Tokenizer(num_words=num_words)
     tok.fit_on_texts(list(X_train))
 
-    print("Pad")
+    LOG("Pad...")
     X_train = pad_sequences(tok.texts_to_sequences(X_train), maxlen=sentence_maxlen)
     X_test = pad_sequences(tok.texts_to_sequences(X_test), maxlen=sentence_maxlen)
     Y_train = train_df['target'].values
@@ -208,11 +216,11 @@ def load_data(sentence_maxlen, shuffle_train=False):
         X_train = X_train[idx]
         Y_train = Y_train[idx]
 
-    print("Embedding matrices")
+    LOG("Embedding matrices")
     e1 = build_glove_embedding_matrix(w_idx=word_index, len_voc=len(train_vocab))
-    print("\tloaded glove")
+    LOG("->loaded glove")
     e2 = build_paragram_embedding_matrix(w_idx=word_index, len_voc=len(train_vocab))
-    print("\tloaded paragram")
+    LOG("->loaded paragram")
     emb_matrix = np.mean([e1, e2], axis=0)
 
     return X_train, Y_train, X_test, train_vocab, emb_matrix, word_index
@@ -251,6 +259,7 @@ class Net(nn.Module):
         self.fc = nn.Linear(2 * self.hidden_size, 1)
 
         self.dropout = nn.Dropout(0.1)
+        self.relu = nn.ReLU()
 
     def forward(self, x):
         # x: B x sen_maxlen
@@ -293,7 +302,7 @@ X_TRAIN, Y_TRAIN, X_TEST, TRAIN_VOCAB, EMBEDDING_MATRIX, WORD_INDEX = load_data(
     sentence_maxlen=HP['sentence_maxlen'], shuffle_train=True
 )
 
-print("\nStarting train loop\n")
+LOG("\nStarting train loop\n")
 
 SEED = None
 train_splits = list(StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED).split(X_TRAIN, Y_TRAIN))
@@ -335,7 +344,7 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     val_preds_fold = np.zeros((x_val_fold.size(0)))
 
     num_batches = len(train_dataloader)
-    print(f"Fold {fold_idx}; num_batches = {num_batches}")
+    LOG(f"Fold {fold_idx}; num_batches = {num_batches}")
 
     # for current fold, train NUM_EPOCHS
     for epoch_idx in range(1, HP['num_epochs'] + 1):
@@ -347,7 +356,7 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
 
         lr_scheduler.step()
 
-        print(f"Epoch {epoch_idx}/{HP['num_epochs']}; lr = {lr_scheduler.get_lr()}")
+        LOG(f"Epoch {epoch_idx}/{HP['num_epochs']}; lr = {lr_scheduler.get_lr()}")
         for batch_idx, (x_batch, y_batch) in tqdm(enumerate(train_dataloader, start=1), total=len(train_dataloader)):
             y_pred = model(x_batch).squeeze(0)
 
@@ -360,10 +369,10 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
             avg_loss += loss.item() / len(train_dataloader)
             my_loss += loss.item()
 
-            if batch_idx % 512 == 0: print("loss:", my_loss / 512.0); my_loss = 0.0
+            if batch_idx % 512 == 0: LOG("->loss:", my_loss / 512.0); my_loss = 0.0
         # -- end batch
 
-        print("Cross-validation")
+        LOG("Cross-validation")
         model.eval()
         avg_val_loss = 0.0
 
@@ -373,13 +382,13 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
             val_preds_fold[i * HP['batch_size']:(i + 1) * HP['batch_size']] = sigmoid(y_pred.cpu().numpy())[:, 0]
         # --
 
-        print('\n\nsummary: Fold {}/{} \t Epoch {}/{} \t loss={:.4f} \t val_loss={:.4f} \t time={:.2f}s\n'.format(
+        LOG('\n\nsummary: Fold {}/{} \t Epoch {}/{} \t loss={:.4f} \t val_loss={:.4f} \t time={:.2f}s\n'.format(
             fold_idx, len(train_splits), epoch_idx, HP['num_epochs'], avg_loss, avg_val_loss, time.time() - start_time
         ))
     # -- end epoch
 
     # for current fold, predict on test data
-    print(f"Fold {fold_idx} done; test on test data")
+    LOG(f"Fold {fold_idx} done; test on test data")
     for i, (x_batch,) in tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
         y_pred = model(x_batch).detach().squeeze(0)
         test_preds_fold[i * HP['batch_size']:(i + 1) * HP['batch_size']] = sigmoid(y_pred.cpu().numpy())[:, 0]
@@ -388,7 +397,7 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     train_preds[val_idx] = val_preds_fold  # fill predictions for training data from current validation set
     test_preds += test_preds_fold / len(train_splits)  # average test predictions for each fold
 
-print("Training done")
+LOG("Training done")
 
 
 # SUBMIT ###############################################################################################################
@@ -405,11 +414,13 @@ def threshold_search(y_true, y_predicted):
     return {'threshold': best_threshold, 'f1': best_score}
 
 
-print("Finding threshold")
+LOG("Finding threshold")
 search_result = threshold_search(Y_TRAIN, train_preds)
-print(search_result)
+LOG(search_result)
 
-print("Generating submission.csv")
+LOG("Generating submission.csv")
 submission = pd.read_csv('../input/sample_submission.csv')
 submission.prediction = (test_preds > search_result['threshold']).astype(int)
 submission.to_csv("submission.csv", index=False)
+
+LOG_FP.close()
