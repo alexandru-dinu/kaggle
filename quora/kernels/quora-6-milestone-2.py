@@ -3,6 +3,7 @@
 
 import datetime
 import re
+import string
 import time
 from collections import Counter
 
@@ -50,13 +51,21 @@ PUNCTUATION = {
     'remove': '?!.,，"#$%\'()*+-/:;<=>@[\\]^_`{|}~“”’™•°'
 }
 
-GLOVE_SYN_DICT = {
+SYN_DICT = {
     'cryptocurrencies': 'crypto currencies',
     'ethereum'        : 'crypto currency',
+    'coinbase'        : 'crypto platform',
+    'altcoin'         : 'crypto currency',
+    'altcoins'        : 'crypto currency',
+    'litecoin'        : 'crypto currency',
     'fortnite'        : 'video game',
     'quorans'         : 'quora members',
+    'quoras'          : 'quora members',
     'brexit'          : 'britain exit',
-    'redmi'           : 'xiaomi',
+    'redmi'           : 'phone',
+    'oneplus'         : 'phone',
+    'hackerrank'      : 'programming challenges',
+    'bhakts'          : 'gullible',
     '√'               : 'square root',
     '÷'               : 'division',
     '∞'               : 'infinity',
@@ -110,14 +119,48 @@ def clean_numbers(x):
 
 
 def clean_syn(x):
-    regex = re.compile('(%s)' % '|'.join(GLOVE_SYN_DICT.keys()))
-    return regex.sub(lambda m: GLOVE_SYN_DICT.get(m.group(0), ''), x)
+    regex = re.compile('(%s)' % '|'.join(SYN_DICT.keys()))
+    return regex.sub(lambda m: SYN_DICT.get(m.group(0), ''), x)
 
 
 def clean_all(x):
     x = clean_text(x)
     x = clean_syn(x)
     return x
+
+
+# MISSPELLINGS ###
+
+class HandleMisspellings:
+
+    def __init__(self, all_words_set, words2idx):
+        self.all_words_set = all_words_set
+        self.words2idx = words2idx
+
+    def prob(self, word):
+        return self.words2idx.get(word, 0)
+
+    @staticmethod
+    def one_edit(word):
+        letters = string.ascii_lowercase
+
+        splits = [(word[:i], word[i:]) for i in range(len(word) + 1)]
+        deletes = [L + R[1:] for L, R in splits if R]
+        transposes = [L + R[1] + R[0] + R[2:] for L, R in splits if len(R) > 1]
+        replaces = [L + c + R[1:] for L, R in splits if R for c in letters]
+        inserts = [L + c + R for L, R in splits for c in letters]
+
+        return set(deletes + transposes + replaces + inserts)
+
+    def known(self, words):
+        return set(words).intersection(self.all_words_set)
+
+    def candidates(self, word):
+        return self.known([word]).union(self.known(self.one_edit(word)))
+
+    def correction(self, word):
+        cs = self.candidates(word)
+        return word if len(cs) == 0 else min(cs, key=lambda w: self.prob(w))
 
 
 # LOAD DATA ############################################################################################################
@@ -130,6 +173,13 @@ def build_glove_embedding_matrix(w_idx, len_voc):
     emb_dict = dict(get_coefs(*o.split(" ")) for o in open(EMB_GLOVE_FILE, encoding='latin'))
 
     all_embs = np.stack(list(emb_dict.values()))
+
+    emb_words_list = list(emb_dict.keys())
+    misspelling_handler = HandleMisspellings(
+        all_words_set=set(emb_words_list),
+        words2idx={w: i for (i, w) in enumerate(emb_words_list)}
+    )
+
     embed_size = all_embs.shape[1]
 
     n_words = min(len_voc, len(w_idx))
@@ -137,12 +187,17 @@ def build_glove_embedding_matrix(w_idx, len_voc):
     # emb_matrix = np.random.normal(emb_mean, emb_std, (n_words, embed_size))
     emb_matrix = np.zeros((n_words, embed_size))
 
-    for word, wi in w_idx.items():
+    for word, wi in tqdm(w_idx.items(), total=len(w_idx.items())):
         if wi >= len_voc: continue
 
         emb_vector = emb_dict.get(word, None)
         if emb_vector is not None:
             emb_matrix[wi] = emb_vector
+        else:
+            # word is not in emb_dict -> try to correct it
+            c_emb_vector = emb_dict.get(misspelling_handler.correction(word), None)
+            if c_emb_vector is not None:
+                emb_matrix[wi] = c_emb_vector
 
     return emb_matrix
 
@@ -154,6 +209,13 @@ def build_paragram_embedding_matrix(w_idx, len_voc):
     emb_dict = dict(get_coefs(*o.split(" ")) for o in open(EMB_PARAGRAM_FILE, encoding="utf8", errors='ignore') if len(o) > 100)
 
     all_embs = np.stack(emb_dict.values())
+
+    emb_words_list = list(emb_dict.keys())
+    misspelling_handler = HandleMisspellings(
+        all_words_set=set(emb_words_list),
+        words2idx={w: i for (i, w) in enumerate(emb_words_list)}
+    )
+
     embed_size = all_embs.shape[1]
 
     n_words = min(len_voc, len(w_idx))
@@ -161,12 +223,17 @@ def build_paragram_embedding_matrix(w_idx, len_voc):
     # emb_matrix = np.random.normal(emb_mean, emb_std, (n_words, embed_size))
     emb_matrix = np.zeros((n_words, embed_size))
 
-    for word, wi in w_idx.items():
+    for word, wi in tqdm(w_idx.items(), total=len(w_idx.items())):
         if wi >= len_voc: continue
 
         emb_vector = emb_dict.get(word, None)
         if emb_vector is not None:
             emb_matrix[wi] = emb_vector
+        else:
+            # word is not in emb_dict -> try to correct it
+            c_emb_vector = emb_dict.get(misspelling_handler.correction(word), None)
+            if c_emb_vector is not None:
+                emb_matrix[wi] = c_emb_vector
 
     return emb_matrix
 
@@ -237,7 +304,7 @@ class Net(nn.Module):
         self.embedding.weight = nn.Parameter(torch.tensor(emb_matrix, dtype=torch.float32))
         self.embedding.weight.requires_grad = False
 
-        self.lstm = nn.LSTM(
+        self.bidir_lstm = nn.LSTM(
             input_size=emb_size,
             hidden_size=self.hidden_size,
             num_layers=1,
@@ -245,7 +312,7 @@ class Net(nn.Module):
             batch_first=True
         )
 
-        self.gru = nn.GRU(
+        self.bidir_gru = nn.GRU(
             input_size=2 * self.hidden_size,
             hidden_size=self.hidden_size,
             num_layers=1,
@@ -264,10 +331,10 @@ class Net(nn.Module):
         emb = self.embedding(x)
         # B x sen_maxlen x emb_size
 
-        out_lstm, _ = self.lstm(emb)
+        out_lstm, _ = self.bidir_lstm(emb)
         # B x sen_maxlen x (2*sen_maxlen)
 
-        _, h_gru = self.gru(self.dropout(out_lstm))
+        _, h_gru = self.bidir_gru(self.dropout(out_lstm))
         # 2 x B x sen_maxlen
 
         h_gru = h_gru.permute((1, 0, 2)).reshape(x.size(0), -1)
@@ -289,7 +356,7 @@ def sigmoid(x):
 LOCAL = False  # whether it's running locally or on kaggle
 
 HP = {
-    "sentence_maxlen": 70,
+    "sentence_maxlen": 80,
     "batch_size"     : 256,
     "num_epochs"     : 8,
 }
