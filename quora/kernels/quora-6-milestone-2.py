@@ -38,7 +38,7 @@ LOG_FP = open(LOG_NAME, "wt")
 
 
 def LOG(*s):
-    _s = str(datetime.datetime.now()).split('.')[0] + str(s) + "\n"
+    _s = str(datetime.datetime.now()).split('.')[0] + " " + "|".join(map(str, s)) + "\n"
     print(_s)
     LOG_FP.write(_s)
 
@@ -123,9 +123,15 @@ def clean_syn(x):
     return regex.sub(lambda m: SYN_DICT.get(m.group(0), ''), x)
 
 
+def clean_site(x):
+    regex = re.compile('(www)([a-z0-9]+)(com|org)')
+    return regex.sub(lambda m: m.group(2), x)
+
+
 def clean_all(x):
     x = clean_text(x)
     x = clean_syn(x)
+    x = clean_site(x)
     return x
 
 
@@ -158,7 +164,7 @@ class HandleMisspellings:
     def candidates(self, word):
         return self.known([word]).union(self.known(self.one_edit(word)))
 
-    def correction(self, word):
+    def correct(self, word):
         cs = self.candidates(word)
         return word if len(cs) == 0 else min(cs, key=lambda w: self.prob(w))
 
@@ -195,7 +201,7 @@ def build_glove_embedding_matrix(w_idx, len_voc):
             emb_matrix[wi] = emb_vector
         else:
             # word is not in emb_dict -> try to correct it
-            c_emb_vector = emb_dict.get(misspelling_handler.correction(word), None)
+            c_emb_vector = emb_dict.get(misspelling_handler.correct(word), None)
             if c_emb_vector is not None:
                 emb_matrix[wi] = c_emb_vector
 
@@ -231,7 +237,7 @@ def build_paragram_embedding_matrix(w_idx, len_voc):
             emb_matrix[wi] = emb_vector
         else:
             # word is not in emb_dict -> try to correct it
-            c_emb_vector = emb_dict.get(misspelling_handler.correction(word), None)
+            c_emb_vector = emb_dict.get(misspelling_handler.correct(word), None)
             if c_emb_vector is not None:
                 emb_matrix[wi] = c_emb_vector
 
@@ -290,6 +296,46 @@ def load_data(sentence_maxlen, shuffle_train=False):
     return X_train, Y_train, X_test, train_vocab, emb_matrix, word_index
 
 
+# ATTENTION#############################################################################################################
+
+class Attention(nn.Module):
+    def __init__(self, feature_dim, step_dim, with_bias=False):
+        super(Attention, self).__init__()
+
+        self.with_bias = with_bias
+        self.feature_dim = feature_dim
+        self.step_dim = step_dim
+        self.features_dim = 0
+
+        weight = torch.zeros(feature_dim, 1)
+        nn.init.xavier_uniform_(weight)
+        self.weight = nn.Parameter(weight, requires_grad=True)
+
+        if with_bias:
+            self.b = nn.Parameter(torch.zeros(step_dim))
+
+    def forward(self, x):
+        feature_dim = self.feature_dim
+        step_dim = self.step_dim
+
+        eij = torch.mm(
+            x.contiguous().view(-1, feature_dim),
+            self.weight
+        ).view(-1, step_dim)
+
+        if self.with_bias:
+            eij = eij + self.b
+
+        eij = torch.tanh(eij)
+        a = torch.exp(eij)
+
+        a = a / torch.sum(a, 1, keepdim=True) + 1e-10
+
+        weighted_input = x * torch.unsqueeze(a, -1)
+
+        return torch.sum(weighted_input, 1)
+
+
 # MODEL ################################################################################################################
 
 class Net(nn.Module):
@@ -298,6 +344,7 @@ class Net(nn.Module):
 
         num_words, emb_size = emb_matrix.shape
 
+        # sentence maxlen
         self.hidden_size = hidden_size
 
         self.embedding = nn.Embedding(num_words, emb_size)
@@ -312,6 +359,10 @@ class Net(nn.Module):
             batch_first=True
         )
 
+        self.lstm_attention = Attention(
+            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size, with_bias=False
+        )
+
         self.bidir_gru = nn.GRU(
             input_size=2 * self.hidden_size,
             hidden_size=self.hidden_size,
@@ -320,9 +371,14 @@ class Net(nn.Module):
             batch_first=True
         )
 
-        self.fc = nn.Linear(2 * self.hidden_size, 1)
+        self.gru_attention = Attention(
+            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size, with_bias=False
+        )
 
-        self.dropout = nn.Dropout(0.1)
+        self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 2 * self.hidden_size)
+        self.fc2 = nn.Linear(2 * self.hidden_size, 1)
+
+        self.dropout = nn.Dropout(0.2)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -334,13 +390,27 @@ class Net(nn.Module):
         out_lstm, _ = self.bidir_lstm(emb)
         # B x sen_maxlen x (2*sen_maxlen)
 
-        _, h_gru = self.bidir_gru(self.dropout(out_lstm))
-        # 2 x B x sen_maxlen
-
-        h_gru = h_gru.permute((1, 0, 2)).reshape(x.size(0), -1)
+        out_lstm_atn = self.lstm_attention(out_lstm)
         # B x (2*sen_maxlen)
 
-        out = self.fc(h_gru).unsqueeze(0)
+        out_gru, _ = self.bidir_gru(self.dropout(out_lstm))
+        # B x sen_maxlen x (2*sen_maxlen)
+
+        out_gru_atn = self.gru_attention(out_gru)
+        # B x (2*sen_maxlen)
+
+        # pooling
+        avg_pool = torch.mean(out_gru, dim=1)
+        # B x (2*sen_maxlen)
+        max_pool, _ = torch.max(out_gru, dim=1)
+        # B x (2*sen_maxlen)
+
+        # concatenate results
+        out = torch.cat((out_lstm_atn, out_gru_atn, avg_pool, max_pool), dim=1)
+        # B x (4 * 2*sen_maxlen)
+
+        out = self.relu(self.fc1(out))
+        out = self.fc2(self.dropout(out)).unsqueeze(0)
         # 1 x B x 1
 
         return out
@@ -356,8 +426,8 @@ def sigmoid(x):
 LOCAL = False  # whether it's running locally or on kaggle
 
 HP = {
-    "sentence_maxlen": 80,
-    "batch_size"     : 256,
+    "sentence_maxlen": 75,
+    "batch_size"     : 512,
     "num_epochs"     : 8,
 }
 
@@ -393,7 +463,7 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     # loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=2, gamma=0.5)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
 
     train_dataloader = torch.utils.data.DataLoader(
         dataset=torch.utils.data.TensorDataset(x_train_fold, y_train_fold), batch_size=HP['batch_size'],
