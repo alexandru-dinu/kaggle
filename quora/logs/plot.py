@@ -6,7 +6,7 @@ log_file = sys.argv[1]
 train_loss = [float(f.strip().split()[5].split("=")[1]) for f in open(log_file).readlines() if 'loss=' in f]
 val_loss   = [float(f.strip().split()[6].split("=")[1]) for f in open(log_file).readlines() if 'loss=' in f]
 
-num_epochs = 8
+num_epochs = int(sys.argv[2])
 num_folds = 5
 assert len(train_loss) == len(val_loss) == num_epochs * num_folds
 
