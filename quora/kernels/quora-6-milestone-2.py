@@ -367,17 +367,18 @@ class Net(nn.Module):
             feature_dim=2 * self.hidden_size, step_dim=self.hidden_size
         )
 
-        self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 2 * self.hidden_size)
-        self.fc2 = nn.Linear(2 * self.hidden_size, 1)
+        self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 4 * self.hidden_size)
+        self.fc2 = nn.Linear(4 * self.hidden_size, 1)
 
-        self.dropout_rnn = nn.Dropout(0.2)
-        self.dropout_fc = nn.Dropout(0.1)
+        self.dropout_emb = nn.Dropout2d(0.15)
+        self.dropout_fc = nn.Dropout(0.15)
         self.relu = nn.ReLU()
 
     def forward(self, x):
         # x: B x sen_maxlen
 
         emb = self.embedding(x)
+        emb = torch.squeeze(self.dropout_emb(torch.unsqueeze(emb, 0)))
         # B x sen_maxlen x emb_size
 
         out_lstm, _ = self.bidir_lstm(emb)
@@ -386,7 +387,7 @@ class Net(nn.Module):
         out_lstm_atn = self.lstm_attention(out_lstm)
         # B x (2*sen_maxlen)
 
-        out_gru, _ = self.bidir_gru(self.dropout_rnn(out_lstm))
+        out_gru, _ = self.bidir_gru(out_lstm)
         # B x sen_maxlen x (2*sen_maxlen)
 
         out_gru_atn = self.gru_attention(out_gru)
