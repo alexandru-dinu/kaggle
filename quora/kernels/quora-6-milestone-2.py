@@ -38,7 +38,7 @@ LOG_FP = open(LOG_NAME, "wt")
 
 
 def LOG(*s):
-    _s = str(datetime.datetime.now()).split('.')[0] + " " + "|".join(map(str, s)) + "\n"
+    _s = str(datetime.datetime.now()).split('.')[0] + " " + " | ".join(map(str, s)) + "\n"
     print(_s)
     LOG_FP.write(_s)
 
@@ -299,10 +299,9 @@ def load_data(sentence_maxlen, shuffle_train=False):
 # ATTENTION#############################################################################################################
 
 class Attention(nn.Module):
-    def __init__(self, feature_dim, step_dim, with_bias=False):
+    def __init__(self, feature_dim, step_dim):
         super(Attention, self).__init__()
 
-        self.with_bias = with_bias
         self.feature_dim = feature_dim
         self.step_dim = step_dim
         self.features_dim = 0
@@ -311,27 +310,20 @@ class Attention(nn.Module):
         nn.init.xavier_uniform_(weight)
         self.weight = nn.Parameter(weight, requires_grad=True)
 
-        if with_bias:
-            self.b = nn.Parameter(torch.zeros(step_dim))
+        self.bias = nn.Parameter(torch.zeros(step_dim), requires_grad=True)
 
     def forward(self, x):
         feature_dim = self.feature_dim
         step_dim = self.step_dim
 
-        eij = torch.mm(
-            x.contiguous().view(-1, feature_dim),
-            self.weight
-        ).view(-1, step_dim)
+        # eij = tanh(Wx + b)
+        eij = torch.tanh(torch.mm(x.contiguous().view(-1, feature_dim), self.weight).view(-1, step_dim) + self.bias)
 
-        if self.with_bias:
-            eij = eij + self.b
+        # alphas = softmax(eij)
+        alphas = torch.exp(eij)
+        alphas = alphas / torch.sum(alphas, 1, keepdim=True) + 1e-10
 
-        eij = torch.tanh(eij)
-        a = torch.exp(eij)
-
-        a = a / torch.sum(a, 1, keepdim=True) + 1e-10
-
-        weighted_input = x * torch.unsqueeze(a, -1)
+        weighted_input = x * torch.unsqueeze(alphas, -1)
 
         return torch.sum(weighted_input, 1)
 
@@ -360,7 +352,7 @@ class Net(nn.Module):
         )
 
         self.lstm_attention = Attention(
-            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size, with_bias=False
+            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size
         )
 
         self.bidir_gru = nn.GRU(
@@ -372,13 +364,14 @@ class Net(nn.Module):
         )
 
         self.gru_attention = Attention(
-            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size, with_bias=False
+            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size
         )
 
         self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 2 * self.hidden_size)
         self.fc2 = nn.Linear(2 * self.hidden_size, 1)
 
-        self.dropout = nn.Dropout(0.2)
+        self.dropout_rnn = nn.Dropout(0.2)
+        self.dropout_fc = nn.Dropout(0.1)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -393,7 +386,7 @@ class Net(nn.Module):
         out_lstm_atn = self.lstm_attention(out_lstm)
         # B x (2*sen_maxlen)
 
-        out_gru, _ = self.bidir_gru(self.dropout(out_lstm))
+        out_gru, _ = self.bidir_gru(self.dropout_rnn(out_lstm))
         # B x sen_maxlen x (2*sen_maxlen)
 
         out_gru_atn = self.gru_attention(out_gru)
@@ -410,7 +403,7 @@ class Net(nn.Module):
         # B x (4 * 2*sen_maxlen)
 
         out = self.relu(self.fc1(out))
-        out = self.fc2(self.dropout(out)).unsqueeze(0)
+        out = self.fc2(self.dropout_fc(out)).unsqueeze(0)
         # 1 x B x 1
 
         return out
