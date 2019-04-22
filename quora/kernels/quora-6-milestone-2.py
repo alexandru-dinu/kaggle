@@ -2,6 +2,8 @@
 
 
 import datetime
+import os
+import random
 import re
 import string
 import time
@@ -26,6 +28,8 @@ assert torch.cuda.is_available()
 
 # GLOBALS ##############################################################################################################
 
+GLOBAL_SEED = 1024
+
 DATA_DIR = "../input"
 TRAIN_CSV = f"{DATA_DIR}/train.csv"
 TEST_CSV = f"{DATA_DIR}/test.csv"
@@ -38,10 +42,25 @@ LOG_FP = open(LOG_NAME, "wt")
 
 
 def LOG(*s):
-    _s = str(datetime.datetime.now()).split('.')[0] + " " + " | ".join(map(str, s)) + "\n"
+    _s = str(datetime.datetime.now()).split('.')[0] + " " + (" | ".join(map(str, s)) if len(s) > 1 else str(s[0])) + "\n"
     print(_s)
     LOG_FP.write(_s)
 
+
+def seed_everything(seed=None):
+    if seed is not None:
+        LOG(f"Seeding random, np, torch with seed = {GLOBAL_SEED}")
+        random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed(seed)
+        torch.backends.cudnn.deterministic = True
+    else:
+        LOG("No seeding")
+
+
+seed_everything(GLOBAL_SEED)
 
 # CLEANING #############################################################################################################
 
@@ -378,8 +397,8 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(2 * self.hidden_size, 1)
 
         self.dropout_emb = nn.Dropout2d(0.15)
-        self.dropout_rnn = nn.Dropout(0.3)
-        self.dropout_fc = nn.Dropout(0.1)
+        self.dropout_rnn = nn.Dropout(0.4)
+        self.dropout_fc = nn.Dropout(0.2)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -401,13 +420,13 @@ class Net(nn.Module):
         # B x (2*sen_maxlen)
 
         # pooling
-        avg_pool1 = torch.mean(out_lstm1, dim=1)
+        max_pool, _ = torch.max(out_lstm2, dim=1)
         # B x (2*sen_maxlen)
-        avg_pool2 = torch.mean(out_lstm2, dim=1)
+        avg_pool = torch.mean(out_lstm2, dim=1)
         # B x (2*sen_maxlen)
 
         # concatenate results
-        out = torch.cat((out_lstm1_atn, avg_pool1, out_lstm2_atn, avg_pool2), dim=1)
+        out = torch.cat((out_lstm1_atn, out_lstm2_atn, max_pool, avg_pool), dim=1)
         # B x (4 * 2*sen_maxlen)
 
         out = self.fc2(self.dropout_fc(self.relu(self.fc1(out)))).unsqueeze(0)
@@ -426,7 +445,7 @@ def sigmoid(x):
 LOCAL = False  # whether it's running locally or on kaggle
 
 HP = {
-    "sentence_maxlen": 75,
+    "sentence_maxlen": 60,
     "batch_size"     : 512,
     "num_epochs"     : 8,
 }
@@ -438,8 +457,7 @@ X_TRAIN, Y_TRAIN, X_TEST, TRAIN_VOCAB, EMBEDDING_MATRIX, WORD_INDEX = load_data(
 
 LOG("\nStarting train loop\n")
 
-SEED = None
-train_splits = list(StratifiedKFold(n_splits=5, shuffle=True, random_state=SEED).split(X_TRAIN, Y_TRAIN))
+train_splits = list(StratifiedKFold(n_splits=5, shuffle=True, random_state=GLOBAL_SEED).split(X_TRAIN, Y_TRAIN))
 
 train_preds = np.zeros((len(X_TRAIN)))
 test_preds = np.zeros((len(X_TEST)))
