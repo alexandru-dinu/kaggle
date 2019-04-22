@@ -328,7 +328,7 @@ class Attention(nn.Module):
         eij = torch.tanh(eij)
 
         a = torch.exp(eij)
-        a = a / torch.sum(a, dim=1, keepdim=True) + 1e-10
+        a = a / (torch.sum(a, dim=1, keepdim=True) + 1e-10)
 
         weighted_input = x * torch.unsqueeze(a, -1)
 
@@ -378,8 +378,8 @@ class Net(nn.Module):
         self.fc2 = nn.Linear(2 * self.hidden_size, 1)
 
         self.dropout_emb = nn.Dropout2d(0.15)
-        self.dropout_rnn = nn.Dropout(0.4)
-        self.dropout_fc = nn.Dropout(0.2)
+        self.dropout_rnn = nn.Dropout(0.3)
+        self.dropout_fc = nn.Dropout(0.1)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -401,13 +401,13 @@ class Net(nn.Module):
         # B x (2*sen_maxlen)
 
         # pooling
-        avg_pool = torch.mean(out_lstm2, dim=1)
+        avg_pool1 = torch.mean(out_lstm1, dim=1)
         # B x (2*sen_maxlen)
-        max_pool, _ = torch.max(out_lstm2, dim=1)
+        avg_pool2 = torch.mean(out_lstm2, dim=1)
         # B x (2*sen_maxlen)
 
         # concatenate results
-        out = torch.cat((out_lstm1_atn, out_lstm2_atn, avg_pool, max_pool), dim=1)
+        out = torch.cat((out_lstm1_atn, avg_pool1, out_lstm2_atn, avg_pool2), dim=1)
         # B x (4 * 2*sen_maxlen)
 
         out = self.fc2(self.dropout_fc(self.relu(self.fc1(out)))).unsqueeze(0)

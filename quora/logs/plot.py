@@ -39,4 +39,4 @@ def plot(log_file):
     plt.close()
 
 
-plot('m2-v16.log')
+plot('m2-v17.log')
