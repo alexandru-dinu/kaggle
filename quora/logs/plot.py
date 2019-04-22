@@ -55,4 +55,4 @@ def plot(log_file):
 
 
 if __name__ == '__main__':
-    plot_m1('m1-2.log')
+    plot('m2-v18.log')
