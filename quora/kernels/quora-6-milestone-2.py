@@ -299,31 +299,38 @@ def load_data(sentence_maxlen, shuffle_train=False):
 # ATTENTION#############################################################################################################
 
 class Attention(nn.Module):
-    def __init__(self, feature_dim, step_dim):
+    def __init__(self, feature_dim, step_dim, with_bias=False):
         super(Attention, self).__init__()
 
+        self.with_bias = with_bias
         self.feature_dim = feature_dim
         self.step_dim = step_dim
-        self.features_dim = 0
 
         weight = torch.zeros(feature_dim, 1)
         nn.init.xavier_uniform_(weight)
         self.weight = nn.Parameter(weight, requires_grad=True)
 
-        self.bias = nn.Parameter(torch.zeros(step_dim), requires_grad=True)
+        if with_bias:
+            self.bias = nn.Parameter(torch.zeros(step_dim), requires_grad=True)
 
     def forward(self, x):
         feature_dim = self.feature_dim
         step_dim = self.step_dim
 
-        # eij = tanh(Wx + b)
-        eij = torch.tanh(torch.mm(x.contiguous().view(-1, feature_dim), self.weight).view(-1, step_dim) + self.bias)
+        eij = torch.mm(
+            x.contiguous().view(-1, feature_dim),
+            self.weight
+        ).view(-1, step_dim)
 
-        # alphas = softmax(eij)
-        alphas = torch.exp(eij)
-        alphas = alphas / torch.sum(alphas, 1, keepdim=True) + 1e-10
+        if self.with_bias:
+            eij = eij + self.bias
 
-        weighted_input = x * torch.unsqueeze(alphas, -1)
+        eij = torch.tanh(eij)
+
+        a = torch.exp(eij)
+        a = a / torch.sum(a, dim=1, keepdim=True) + 1e-10
+
+        weighted_input = x * torch.unsqueeze(a, -1)
 
         return torch.sum(weighted_input, 1)
 
@@ -343,7 +350,7 @@ class Net(nn.Module):
         self.embedding.weight = nn.Parameter(torch.tensor(emb_matrix, dtype=torch.float32))
         self.embedding.weight.requires_grad = False
 
-        self.bidir_lstm = nn.LSTM(
+        self.bidir_lstm1 = nn.LSTM(
             input_size=emb_size,
             hidden_size=self.hidden_size,
             num_layers=1,
@@ -351,11 +358,11 @@ class Net(nn.Module):
             batch_first=True
         )
 
-        self.lstm_attention = Attention(
-            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size
+        self.lstm1_attention = Attention(
+            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size, with_bias=True
         )
 
-        self.bidir_gru = nn.GRU(
+        self.bidir_lstm2 = nn.LSTM(
             input_size=2 * self.hidden_size,
             hidden_size=self.hidden_size,
             num_layers=1,
@@ -363,48 +370,47 @@ class Net(nn.Module):
             batch_first=True
         )
 
-        self.gru_attention = Attention(
-            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size
+        self.lstm2_attention = Attention(
+            feature_dim=2 * self.hidden_size, step_dim=self.hidden_size, with_bias=True
         )
 
-        self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 4 * self.hidden_size)
-        self.fc2 = nn.Linear(4 * self.hidden_size, 1)
+        self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 2 * self.hidden_size)
+        self.fc2 = nn.Linear(2 * self.hidden_size, 1)
 
         self.dropout_emb = nn.Dropout2d(0.15)
-        self.dropout_fc = nn.Dropout(0.15)
+        self.dropout_rnn = nn.Dropout(0.4)
+        self.dropout_fc = nn.Dropout(0.2)
         self.relu = nn.ReLU()
 
     def forward(self, x):
         # x: B x sen_maxlen
 
-        emb = self.embedding(x)
-        emb = torch.squeeze(self.dropout_emb(torch.unsqueeze(emb, 0)))
+        emb = self.dropout_emb(self.embedding(x))
         # B x sen_maxlen x emb_size
 
-        out_lstm, _ = self.bidir_lstm(emb)
+        out_lstm1, _ = self.bidir_lstm1(emb)
         # B x sen_maxlen x (2*sen_maxlen)
 
-        out_lstm_atn = self.lstm_attention(out_lstm)
+        out_lstm1_atn = self.lstm1_attention(out_lstm1)
         # B x (2*sen_maxlen)
 
-        out_gru, _ = self.bidir_gru(out_lstm)
+        out_lstm2, _ = self.bidir_lstm2(self.dropout_rnn(out_lstm1))
         # B x sen_maxlen x (2*sen_maxlen)
 
-        out_gru_atn = self.gru_attention(out_gru)
+        out_lstm2_atn = self.lstm2_attention(out_lstm2)
         # B x (2*sen_maxlen)
 
         # pooling
-        avg_pool = torch.mean(out_gru, dim=1)
+        avg_pool = torch.mean(out_lstm2, dim=1)
         # B x (2*sen_maxlen)
-        max_pool, _ = torch.max(out_gru, dim=1)
+        max_pool, _ = torch.max(out_lstm2, dim=1)
         # B x (2*sen_maxlen)
 
         # concatenate results
-        out = torch.cat((out_lstm_atn, out_gru_atn, avg_pool, max_pool), dim=1)
+        out = torch.cat((out_lstm1_atn, out_lstm2_atn, avg_pool, max_pool), dim=1)
         # B x (4 * 2*sen_maxlen)
 
-        out = self.relu(self.fc1(out))
-        out = self.fc2(self.dropout_fc(out)).unsqueeze(0)
+        out = self.fc2(self.dropout_fc(self.relu(self.fc1(out)))).unsqueeze(0)
         # 1 x B x 1
 
         return out
