@@ -28,7 +28,8 @@ assert torch.cuda.is_available()
 
 # GLOBALS ##############################################################################################################
 
-GLOBAL_SEED = 1024
+# int value or None
+GLOBAL_SEED = None
 
 DATA_DIR = "../input"
 TRAIN_CSV = f"{DATA_DIR}/train.csv"
@@ -337,21 +338,25 @@ class Attention(nn.Module):
         step_dim = self.step_dim
 
         eij = torch.mm(
-            x.contiguous().view(-1, feature_dim),
-            self.weight
+            x.contiguous().view(-1, feature_dim),  # (B * step_dim) x feature_dim
+            self.weight  # feature_dim x 1
         ).view(-1, step_dim)
 
         if self.with_bias:
             eij = eij + self.bias
 
         eij = torch.tanh(eij)
+        # B x step_dim
 
         a = torch.exp(eij)
         a = a / (torch.sum(a, dim=1, keepdim=True) + 1e-10)
+        # B x step_dim
 
         weighted_input = x * torch.unsqueeze(a, -1)
+        # B x step_dim x feature_dim
 
-        return torch.sum(weighted_input, 1)
+        # sum over step_dim
+        return torch.sum(weighted_input, dim=1)
 
 
 # MODEL ################################################################################################################
@@ -396,9 +401,9 @@ class Net(nn.Module):
         self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 2 * self.hidden_size)
         self.fc2 = nn.Linear(2 * self.hidden_size, 1)
 
-        self.dropout_emb = nn.Dropout2d(0.15)
-        self.dropout_rnn = nn.Dropout(0.4)
-        self.dropout_fc = nn.Dropout(0.2)
+        self.dropout_emb = nn.Dropout2d(0.0)
+        self.dropout_rnn = nn.Dropout(0.3)
+        self.dropout_fc = nn.Dropout(0.1)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -446,7 +451,7 @@ LOCAL = False  # whether it's running locally or on kaggle
 
 HP = {
     "sentence_maxlen": 60,
-    "batch_size"     : 512,
+    "batch_size"     : 256,
     "num_epochs"     : 8,
 }
 
@@ -481,7 +486,7 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     # loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.25)
 
     train_dataloader = torch.utils.data.DataLoader(
         dataset=torch.utils.data.TensorDataset(x_train_fold, y_train_fold), batch_size=HP['batch_size'],
