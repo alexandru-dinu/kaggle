@@ -2,6 +2,7 @@
 .vscode/
 input/
 checkpoints/
+tb-logs/
 
 *.pth
 *.npy
