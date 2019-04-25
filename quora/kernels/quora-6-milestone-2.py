@@ -399,11 +399,14 @@ class Net(nn.Module):
         )
 
         self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 2 * self.hidden_size)
+        # nn.init.orthogonal_(self.fc1.weight)
+        # nn.init.zeros_(self.fc1.bias)
+
         self.fc2 = nn.Linear(2 * self.hidden_size, 1)
 
-        self.dropout_emb = nn.Dropout2d(0.0)
-        self.dropout_rnn = nn.Dropout(0.3)
-        self.dropout_fc = nn.Dropout(0.1)
+        self.dropout_emb = nn.Dropout2d(0.15)
+        self.dropout_rnn = nn.Dropout(0.4)
+        self.dropout_fc = nn.Dropout(0.2)
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -486,7 +489,7 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     # loss_fn = torch.nn.CrossEntropyLoss(reduction="sum")
 
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.25)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.8)
 
     train_dataloader = torch.utils.data.DataLoader(
         dataset=torch.utils.data.TensorDataset(x_train_fold, y_train_fold), batch_size=HP['batch_size'],
