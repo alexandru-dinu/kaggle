@@ -43,7 +43,7 @@ EMB_PARAGRAM_FILE = f"{DATA_DIR}/embeddings/paragram_300_sl999/paragram_300_sl99
 LOG_NAME = "./output.log"
 LOG_FP = open(LOG_NAME, "wt")
 
-_dir = "../tb-logs/xavier-tanh-fc"
+_dir = "../tb-logs/xavier-1fc"
 os.makedirs(_dir, exist_ok=True)
 TB_WRITER = SummaryWriter(_dir)
 
@@ -404,11 +404,10 @@ class Net(nn.Module):
             feature_dim=2 * self.hidden_size, step_dim=self.hidden_size, with_bias=True
         )
 
-        self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 2 * self.hidden_size)
-        nn.init.orthogonal_(self.fc1.weight)
-        nn.init.zeros_(self.fc1.bias)
-
-        self.fc2 = nn.Linear(2 * self.hidden_size, 1)
+        self.fc1 = nn.Linear(4 * 2 * self.hidden_size, 1)
+        # nn.init.orthogonal_(self.fc1.weight)
+        # nn.init.zeros_(self.fc1.bias)
+        # self.fc2 = nn.Linear(2 * self.hidden_size, 1)
 
         self.dropout_emb = nn.Dropout2d(0.15)
         self.dropout_rnn = nn.Dropout(0.4)
@@ -445,7 +444,7 @@ class Net(nn.Module):
         out = torch.cat((out_lstm1_atn, out_lstm2_atn, max_pool, avg_pool), dim=1)
         # B x (4 * 2*sen_maxlen)
 
-        out = self.fc2(self.dropout_fc(self.tanh(self.fc1(out)))).unsqueeze(0)
+        out = self.fc1(self.dropout_fc(out)).unsqueeze(0)
         # 1 x B x 1
 
         return out
