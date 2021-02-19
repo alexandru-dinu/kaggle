@@ -43,7 +43,12 @@ LOG_FP = open(LOG_NAME, "wt")
 
 
 def LOG(*s):
-    _s = str(datetime.datetime.now()).split('.')[0] + " " + (" | ".join(map(str, s)) if len(s) > 1 else str(s[0])) + "\n"
+    _s = (
+        str(datetime.datetime.now()).split(".")[0]
+        + " "
+        + (" | ".join(map(str, s)) if len(s) > 1 else str(s[0]))
+        + "\n"
+    )
     print(_s)
     LOG_FP.write(_s)
 
@@ -52,7 +57,7 @@ def seed_everything(seed=None):
     if seed is not None:
         LOG(f"Seeding random, np, torch with seed = {GLOBAL_SEED}")
         random.seed(seed)
-        os.environ['PYTHONHASHSEED'] = str(seed)
+        os.environ["PYTHONHASHSEED"] = str(seed)
         np.random.seed(seed)
         torch.manual_seed(seed)
         torch.cuda.manual_seed(seed)
@@ -66,49 +71,49 @@ seed_everything(GLOBAL_SEED)
 # CLEANING #############################################################################################################
 
 PUNCTUATION = {
-    'sep'   : u'\u200b' + "/-'´′‘…—−–",
-    'keep'  : "&",
-    'remove': '?!.,，"#$%\'()*+-/:;<=>@[\\]^_`{|}~“”’™•°'
+    "sep": "\u200b" + "/-'´′‘…—−–",
+    "keep": "&",
+    "remove": "?!.,，\"#$%'()*+-/:;<=>@[\\]^_`{|}~“”’™•°",
 }
 
 SYN_DICT = {
-    'cryptocurrencies': 'crypto currencies',
-    'ethereum'        : 'crypto currency',
-    'coinbase'        : 'crypto platform',
-    'altcoin'         : 'crypto currency',
-    'altcoins'        : 'crypto currency',
-    'litecoin'        : 'crypto currency',
-    'fortnite'        : 'video game',
-    'quorans'         : 'quora members',
-    'quoras'          : 'quora members',
-    'brexit'          : 'britain exit',
-    'redmi'           : 'phone',
-    'oneplus'         : 'phone',
-    'hackerrank'      : 'programming challenges',
-    'bhakts'          : 'gullible',
-    '√'               : 'square root',
-    '÷'               : 'division',
-    '∞'               : 'infinity',
-    '€'               : 'euro',
-    '£'               : 'pound sterling',
-    '$'               : 'dollar',
-    '₹'               : 'rupee',
-    '×'               : 'product',
-    'ã'               : 'a',
-    'è'               : 'e',
-    'é'               : 'e',
-    'ö'               : 'o',
-    '²'               : 'squared',
-    '∈'               : 'in',
-    '∩'               : 'intersection',
-    u'\u0398'         : 'Theta',
-    u'\u03A0'         : 'Pi',
-    u'\u03A9'         : 'Omega',
-    u'\u0392'         : 'Beta',
-    u'\u03B8'         : 'theta',
-    u'\u03C0'         : 'pi',
-    u'\u03C9'         : 'omega',
-    u'\u03B2'         : 'beta',
+    "cryptocurrencies": "crypto currencies",
+    "ethereum": "crypto currency",
+    "coinbase": "crypto platform",
+    "altcoin": "crypto currency",
+    "altcoins": "crypto currency",
+    "litecoin": "crypto currency",
+    "fortnite": "video game",
+    "quorans": "quora members",
+    "quoras": "quora members",
+    "brexit": "britain exit",
+    "redmi": "phone",
+    "oneplus": "phone",
+    "hackerrank": "programming challenges",
+    "bhakts": "gullible",
+    "√": "square root",
+    "÷": "division",
+    "∞": "infinity",
+    "€": "euro",
+    "£": "pound sterling",
+    "$": "dollar",
+    "₹": "rupee",
+    "×": "product",
+    "ã": "a",
+    "è": "e",
+    "é": "e",
+    "ö": "o",
+    "²": "squared",
+    "∈": "in",
+    "∩": "intersection",
+    "\u0398": "Theta",
+    "\u03A0": "Pi",
+    "\u03A9": "Omega",
+    "\u0392": "Beta",
+    "\u03B8": "theta",
+    "\u03C0": "pi",
+    "\u03C9": "omega",
+    "\u03B2": "beta",
 }
 
 
@@ -119,32 +124,32 @@ def tokenize(s: str):
 def clean_text(x):
     x = x.lower()
 
-    for p in PUNCTUATION['sep']:
+    for p in PUNCTUATION["sep"]:
         x = x.replace(p, " ")
-    for p in PUNCTUATION['keep']:
+    for p in PUNCTUATION["keep"]:
         x = x.replace(p, f" {p} ")
-    for p in PUNCTUATION['remove']:
+    for p in PUNCTUATION["remove"]:
         x = x.replace(p, "")
 
     return x
 
 
 def clean_numbers(x):
-    x = re.sub('[0-9]{5,}', '#####', x)
-    x = re.sub('[0-9]{4}', '####', x)
-    x = re.sub('[0-9]{3}', '###', x)
-    x = re.sub('[0-9]{2}', '##', x)
+    x = re.sub("[0-9]{5,}", "#####", x)
+    x = re.sub("[0-9]{4}", "####", x)
+    x = re.sub("[0-9]{3}", "###", x)
+    x = re.sub("[0-9]{2}", "##", x)
 
     return x
 
 
 def clean_syn(x):
-    regex = re.compile('(%s)' % '|'.join(SYN_DICT.keys()))
-    return regex.sub(lambda m: SYN_DICT.get(m.group(0), ''), x)
+    regex = re.compile("(%s)" % "|".join(SYN_DICT.keys()))
+    return regex.sub(lambda m: SYN_DICT.get(m.group(0), ""), x)
 
 
 def clean_site(x):
-    regex = re.compile('(www)([a-z0-9]+)(com|org)')
+    regex = re.compile("(www)([a-z0-9]+)(com|org)")
     return regex.sub(lambda m: m.group(2), x)
 
 
@@ -157,8 +162,8 @@ def clean_all(x):
 
 # MISSPELLINGS ###
 
-class HandleMisspellings:
 
+class HandleMisspellings:
     def __init__(self, all_words_set, words2idx):
         self.all_words_set = all_words_set
         self.words2idx = words2idx
@@ -194,16 +199,18 @@ class HandleMisspellings:
 
 def build_glove_embedding_matrix(w_idx, len_voc):
     def get_coefs(w, *arr):
-        return w, np.asarray(arr, dtype='float32')
+        return w, np.asarray(arr, dtype="float32")
 
-    emb_dict = dict(get_coefs(*o.split(" ")) for o in open(EMB_GLOVE_FILE, encoding='latin'))
+    emb_dict = dict(
+        get_coefs(*o.split(" ")) for o in open(EMB_GLOVE_FILE, encoding="latin")
+    )
 
     all_embs = np.stack(list(emb_dict.values()))
 
     emb_words_list = list(emb_dict.keys())
     misspelling_handler = HandleMisspellings(
         all_words_set=set(emb_words_list),
-        words2idx={w: i for (i, w) in enumerate(emb_words_list)}
+        words2idx={w: i for (i, w) in enumerate(emb_words_list)},
     )
 
     embed_size = all_embs.shape[1]
@@ -214,7 +221,8 @@ def build_glove_embedding_matrix(w_idx, len_voc):
     emb_matrix = np.zeros((n_words, embed_size))
 
     for word, wi in tqdm(w_idx.items(), total=len(w_idx.items())):
-        if wi >= len_voc: continue
+        if wi >= len_voc:
+            continue
 
         emb_vector = emb_dict.get(word, None)
         if emb_vector is not None:
@@ -230,16 +238,20 @@ def build_glove_embedding_matrix(w_idx, len_voc):
 
 def build_paragram_embedding_matrix(w_idx, len_voc):
     def get_coefs(w, *arr):
-        return w, np.asarray(arr, dtype='float32')
+        return w, np.asarray(arr, dtype="float32")
 
-    emb_dict = dict(get_coefs(*o.split(" ")) for o in open(EMB_PARAGRAM_FILE, encoding="utf8", errors='ignore') if len(o) > 100)
+    emb_dict = dict(
+        get_coefs(*o.split(" "))
+        for o in open(EMB_PARAGRAM_FILE, encoding="utf8", errors="ignore")
+        if len(o) > 100
+    )
 
     all_embs = np.stack(emb_dict.values())
 
     emb_words_list = list(emb_dict.keys())
     misspelling_handler = HandleMisspellings(
         all_words_set=set(emb_words_list),
-        words2idx={w: i for (i, w) in enumerate(emb_words_list)}
+        words2idx={w: i for (i, w) in enumerate(emb_words_list)},
     )
 
     embed_size = all_embs.shape[1]
@@ -250,7 +262,8 @@ def build_paragram_embedding_matrix(w_idx, len_voc):
     emb_matrix = np.zeros((n_words, embed_size))
 
     for word, wi in tqdm(w_idx.items(), total=len(w_idx.items())):
-        if wi >= len_voc: continue
+        if wi >= len_voc:
+            continue
 
         emb_vector = emb_dict.get(word, None)
         if emb_vector is not None:
@@ -297,7 +310,7 @@ def load_data(sentence_maxlen, shuffle_train=False):
     LOG("Pad...")
     X_train = pad_sequences(tok.texts_to_sequences(X_train), maxlen=sentence_maxlen)
     X_test = pad_sequences(tok.texts_to_sequences(X_test), maxlen=sentence_maxlen)
-    Y_train = train_df['target'].values
+    Y_train = train_df["target"].values
 
     word_index = tok.word_index
 
@@ -317,6 +330,7 @@ def load_data(sentence_maxlen, shuffle_train=False):
 
 
 # ATTENTION#############################################################################################################
+
 
 class Attention(nn.Module):
     def __init__(self, feature_dim, step_dim, with_bias=False):
@@ -339,7 +353,7 @@ class Attention(nn.Module):
 
         eij = torch.mm(
             x.contiguous().view(-1, feature_dim),  # (B * step_dim) x feature_dim
-            self.weight  # feature_dim x 1
+            self.weight,  # feature_dim x 1
         ).view(-1, step_dim)
 
         if self.with_bias:
@@ -361,6 +375,7 @@ class Attention(nn.Module):
 
 # MODEL ################################################################################################################
 
+
 class Net(nn.Module):
     def __init__(self, emb_matrix, hidden_size):
         super(Net, self).__init__()
@@ -371,7 +386,9 @@ class Net(nn.Module):
         self.hidden_size = hidden_size
 
         self.embedding = nn.Embedding(num_words, emb_size)
-        self.embedding.weight = nn.Parameter(torch.tensor(emb_matrix, dtype=torch.float32))
+        self.embedding.weight = nn.Parameter(
+            torch.tensor(emb_matrix, dtype=torch.float32)
+        )
         self.embedding.weight.requires_grad = False
 
         self.bidir_lstm1 = nn.LSTM(
@@ -379,7 +396,7 @@ class Net(nn.Module):
             hidden_size=self.hidden_size,
             num_layers=1,
             bidirectional=True,
-            batch_first=True
+            batch_first=True,
         )
 
         self.lstm1_attention = Attention(
@@ -391,7 +408,7 @@ class Net(nn.Module):
             hidden_size=self.hidden_size,
             num_layers=1,
             bidirectional=True,
-            batch_first=True
+            batch_first=True,
         )
 
         self.lstm2_attention = Attention(
@@ -454,35 +471,44 @@ LOCAL = False  # whether it's running locally or on kaggle
 
 HP = {
     "sentence_maxlen": 60,
-    "batch_size"     : 256,
-    "num_epochs"     : 8,
+    "batch_size": 256,
+    "num_epochs": 8,
 }
 
 # LOAD DATA
 X_TRAIN, Y_TRAIN, X_TEST, TRAIN_VOCAB, EMBEDDING_MATRIX, WORD_INDEX = load_data(
-    sentence_maxlen=HP['sentence_maxlen'], shuffle_train=True
+    sentence_maxlen=HP["sentence_maxlen"], shuffle_train=True
 )
 
 LOG("\nStarting train loop\n")
 
-train_splits = list(StratifiedKFold(n_splits=5, shuffle=True, random_state=GLOBAL_SEED).split(X_TRAIN, Y_TRAIN))
+train_splits = list(
+    StratifiedKFold(n_splits=5, shuffle=True, random_state=GLOBAL_SEED).split(
+        X_TRAIN, Y_TRAIN
+    )
+)
 
 train_preds = np.zeros((len(X_TRAIN)))
 test_preds = np.zeros((len(X_TEST)))
 
 test_dataloader = torch.utils.data.DataLoader(
-    dataset=torch.utils.data.TensorDataset(torch.tensor(X_TEST, dtype=torch.long).cuda()),
-    batch_size=HP['batch_size'], shuffle=False
+    dataset=torch.utils.data.TensorDataset(
+        torch.tensor(X_TEST, dtype=torch.long).cuda()
+    ),
+    batch_size=HP["batch_size"],
+    shuffle=False,
 )
 
 for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
 
     x_train_fold = torch.tensor(X_TRAIN[train_idx], dtype=torch.long).cuda()
-    y_train_fold = torch.tensor(Y_TRAIN[train_idx, np.newaxis], dtype=torch.float32).cuda()
+    y_train_fold = torch.tensor(
+        Y_TRAIN[train_idx, np.newaxis], dtype=torch.float32
+    ).cuda()
     x_val_fold = torch.tensor(X_TRAIN[val_idx], dtype=torch.long).cuda()
     y_val_fold = torch.tensor(Y_TRAIN[val_idx, np.newaxis], dtype=torch.float32).cuda()
 
-    model = Net(emb_matrix=EMBEDDING_MATRIX, hidden_size=HP['sentence_maxlen'])
+    model = Net(emb_matrix=EMBEDDING_MATRIX, hidden_size=HP["sentence_maxlen"])
     model.cuda()
 
     loss_fn = torch.nn.BCEWithLogitsLoss(reduction="sum")
@@ -492,12 +518,14 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.8)
 
     train_dataloader = torch.utils.data.DataLoader(
-        dataset=torch.utils.data.TensorDataset(x_train_fold, y_train_fold), batch_size=HP['batch_size'],
-        shuffle=True
+        dataset=torch.utils.data.TensorDataset(x_train_fold, y_train_fold),
+        batch_size=HP["batch_size"],
+        shuffle=True,
     )
     val_dataloader = torch.utils.data.DataLoader(
-        dataset=torch.utils.data.TensorDataset(x_val_fold, y_val_fold), batch_size=HP['batch_size'],
-        shuffle=False
+        dataset=torch.utils.data.TensorDataset(x_val_fold, y_val_fold),
+        batch_size=HP["batch_size"],
+        shuffle=False,
     )
 
     test_preds_fold = np.zeros(len(X_TEST))
@@ -507,7 +535,7 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
     LOG(f"Fold {fold_idx}; num_batches = {num_batches}")
 
     # for current fold, train NUM_EPOCHS
-    for epoch_idx in range(1, HP['num_epochs'] + 1):
+    for epoch_idx in range(1, HP["num_epochs"] + 1):
         start_time = time.time()
 
         model.train()
@@ -517,7 +545,9 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
         lr_scheduler.step()
 
         LOG(f"Epoch {epoch_idx}/{HP['num_epochs']}; lr = {lr_scheduler.get_lr()}")
-        for batch_idx, (x_batch, y_batch) in tqdm(enumerate(train_dataloader, start=1), total=len(train_dataloader)):
+        for batch_idx, (x_batch, y_batch) in tqdm(
+            enumerate(train_dataloader, start=1), total=len(train_dataloader)
+        ):
             y_pred = model(x_batch).squeeze(0)
 
             loss = loss_fn(y_pred, y_batch)
@@ -529,38 +559,59 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
             avg_loss += loss.item() / len(train_dataloader)
             my_loss += loss.item()
 
-            if batch_idx % 512 == 0: LOG("->loss:", my_loss / 512.0); my_loss = 0.0
+            if batch_idx % 512 == 0:
+                LOG("->loss:", my_loss / 512.0)
+                my_loss = 0.0
         # -- end batch
 
         LOG("Cross-validation")
         model.eval()
         avg_val_loss = 0.0
 
-        for i, (x_batch, y_batch) in tqdm(enumerate(val_dataloader), total=len(val_dataloader)):
+        for i, (x_batch, y_batch) in tqdm(
+            enumerate(val_dataloader), total=len(val_dataloader)
+        ):
             y_pred = model(x_batch).detach().squeeze(0)
             avg_val_loss += loss_fn(y_pred, y_batch).item() / len(val_dataloader)
-            val_preds_fold[i * HP['batch_size']:(i + 1) * HP['batch_size']] = sigmoid(y_pred.cpu().numpy())[:, 0]
+            val_preds_fold[i * HP["batch_size"] : (i + 1) * HP["batch_size"]] = sigmoid(
+                y_pred.cpu().numpy()
+            )[:, 0]
         # --
 
-        LOG('\n\nsummary: Fold {}/{} \t Epoch {}/{} \t loss={:.4f} \t val_loss={:.4f} \t time={:.2f}s\n'.format(
-            fold_idx, len(train_splits), epoch_idx, HP['num_epochs'], avg_loss, avg_val_loss, time.time() - start_time
-        ))
+        LOG(
+            "\n\nsummary: Fold {}/{} \t Epoch {}/{} \t loss={:.4f} \t val_loss={:.4f} \t time={:.2f}s\n".format(
+                fold_idx,
+                len(train_splits),
+                epoch_idx,
+                HP["num_epochs"],
+                avg_loss,
+                avg_val_loss,
+                time.time() - start_time,
+            )
+        )
     # -- end epoch
 
     # for current fold, predict on test data
     LOG(f"Fold {fold_idx} done; test on test data")
     for i, (x_batch,) in tqdm(enumerate(test_dataloader), total=len(test_dataloader)):
         y_pred = model(x_batch).detach().squeeze(0)
-        test_preds_fold[i * HP['batch_size']:(i + 1) * HP['batch_size']] = sigmoid(y_pred.cpu().numpy())[:, 0]
+        test_preds_fold[i * HP["batch_size"] : (i + 1) * HP["batch_size"]] = sigmoid(
+            y_pred.cpu().numpy()
+        )[:, 0]
     # --
 
-    train_preds[val_idx] = val_preds_fold  # fill predictions for training data from current validation set
-    test_preds += test_preds_fold / len(train_splits)  # average test predictions for each fold
+    train_preds[
+        val_idx
+    ] = val_preds_fold  # fill predictions for training data from current validation set
+    test_preds += test_preds_fold / len(
+        train_splits
+    )  # average test predictions for each fold
 
 LOG("Training done")
 
 
 # SUBMIT ###############################################################################################################
+
 
 def threshold_search(y_true, y_predicted):
     best_threshold, best_score = 0, 0
@@ -571,7 +622,7 @@ def threshold_search(y_true, y_predicted):
             best_threshold = thr
             best_score = score
 
-    return {'threshold': best_threshold, 'f1': best_score}
+    return {"threshold": best_threshold, "f1": best_score}
 
 
 LOG("Finding threshold")
@@ -579,8 +630,8 @@ search_result = threshold_search(Y_TRAIN, train_preds)
 LOG(search_result)
 
 LOG("Generating submission.csv")
-submission = pd.read_csv('../input/sample_submission.csv')
-submission.prediction = (test_preds > search_result['threshold']).astype(int)
+submission = pd.read_csv("../input/sample_submission.csv")
+submission.prediction = (test_preds > search_result["threshold"]).astype(int)
 submission.to_csv("submission.csv", index=False)
 
 LOG_FP.close()

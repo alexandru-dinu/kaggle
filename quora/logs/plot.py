@@ -3,13 +3,17 @@ import sys
 
 
 def plot_m1(log_file):
-    train_loss = [float(f.strip().split()[5].split("=")[1]) for f in open(log_file) if "loss" in f]
-    val_loss = [float(f.strip().split()[6].split("=")[1]) for f in open(log_file) if "loss" in f]
+    train_loss = [
+        float(f.strip().split()[5].split("=")[1]) for f in open(log_file) if "loss" in f
+    ]
+    val_loss = [
+        float(f.strip().split()[6].split("=")[1]) for f in open(log_file) if "loss" in f
+    ]
 
     n = len(train_loss)
 
-    plt.plot(range(n), train_loss, 'r-')
-    plt.plot(range(n), val_loss, 'g-')
+    plt.plot(range(n), train_loss, "r-")
+    plt.plot(range(n), val_loss, "g-")
     plt.xticks(range(0, n, 2))
     plt.grid()
 
@@ -34,19 +38,27 @@ def plot(log_file):
     fp = open(log_file)
 
     _all = fp.read()
-    num_epochs = int(_all[_all.find("Epoch"):][:10].split("/")[1].replace(";", ""))
+    num_epochs = int(_all[_all.find("Epoch") :][:10].split("/")[1].replace(";", ""))
     num_folds = 5
     fp.close()
 
-    train_loss = [float(f.strip().split()[5].split("=")[1]) for f in open(log_file).readlines() if 'loss=' in f]
-    val_loss = [float(f.strip().split()[6].split("=")[1]) for f in open(log_file).readlines() if 'loss=' in f]
+    train_loss = [
+        float(f.strip().split()[5].split("=")[1])
+        for f in open(log_file).readlines()
+        if "loss=" in f
+    ]
+    val_loss = [
+        float(f.strip().split()[6].split("=")[1])
+        for f in open(log_file).readlines()
+        if "loss=" in f
+    ]
 
     assert len(train_loss) == len(val_loss) == num_epochs * num_folds
 
     n = num_epochs * num_folds
 
-    plt.plot(range(n), train_loss, 'r-')
-    plt.plot(range(n), val_loss, 'g-')
+    plt.plot(range(n), train_loss, "r-")
+    plt.plot(range(n), val_loss, "g-")
     plt.xticks(range(0, n, 2))
     plt.grid()
 
@@ -54,5 +66,5 @@ def plot(log_file):
     plt.close()
 
 
-if __name__ == '__main__':
-    plot('m2-v25.log')
+if __name__ == "__main__":
+    plot("m2-v25.log")
