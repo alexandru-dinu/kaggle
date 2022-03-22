@@ -14,15 +14,13 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim
-import torch.tensor as tensor
 import torch.utils.data
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedKFold
-from tqdm.auto import tqdm
-
 from tensorboardX import SummaryWriter
+from tqdm.auto import tqdm
 
 tqdm.pandas()
 

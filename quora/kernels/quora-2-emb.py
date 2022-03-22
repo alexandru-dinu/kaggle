@@ -10,7 +10,6 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-import torch.tensor as tensor
 import torch.utils.data
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer

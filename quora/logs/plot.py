@@ -1,5 +1,4 @@
 import matplotlib.pyplot as plt
-import sys
 
 
 def plot_m1(log_file):

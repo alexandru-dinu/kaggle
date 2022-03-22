@@ -14,7 +14,6 @@ import pandas as pd
 import torch
 import torch.nn as nn
 import torch.optim
-import torch.tensor as tensor
 import torch.utils.data
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
@@ -600,12 +599,10 @@ for fold_idx, (train_idx, val_idx) in enumerate(train_splits, start=1):
         )[:, 0]
     # --
 
-    train_preds[
-        val_idx
-    ] = val_preds_fold  # fill predictions for training data from current validation set
-    test_preds += test_preds_fold / len(
-        train_splits
-    )  # average test predictions for each fold
+    # fill predictions for training data from current validation set
+    train_preds[val_idx] = val_preds_fold
+    # average test predictions for each fold
+    test_preds += test_preds_fold / len(train_splits)
 
 LOG("Training done")
 

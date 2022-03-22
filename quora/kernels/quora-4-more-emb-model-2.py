@@ -1,7 +1,6 @@
 # coding: utf-8
 
 
-import os
 import re
 import time
 from collections import Counter
@@ -10,15 +9,14 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.nn as nn
-import torch.tensor as tensor
+import torch.optim
 import torch.utils.data
 from keras.preprocessing.sequence import pad_sequences
 from keras.preprocessing.text import Tokenizer
 from sklearn.metrics import f1_score
 from sklearn.model_selection import StratifiedKFold
-import torch.optim
-from tqdm.auto import tqdm
 from torch.autograd import Variable
+from tqdm.auto import tqdm
 
 tqdm.pandas()
 
